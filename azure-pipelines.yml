@@ -11,16 +11,16 @@ trigger:
 
 variables:
   buildConfiguration: 'Release'
-  azureServiceConnection: 'MyAzureConnection'     # Update with your Azure DevOps Service Connection name
-  subscriptionId: '<your-subscription-id>'        # Replace with your Azure Subscription ID
-  location: 'eastasia'
-  resourceGroupName: 'playersapi-rg'
-  webAppName: 'playersapi-web'
+  azureServiceConnection: 'WebAppAzureSubsCon'  
+  subscriptionId: 'b3342add-7cc4-491b-bf5e-e93aa8e970f2'      
+  location: 'southeastasia'
+  resourceGroupName: 'web-app-rg'
+  webAppName: 'contosopizza-api-app'
   artifactName: 'drop'
 
 stages:
 # ============================================
-# 1️⃣ BUILD STAGE
+# BUILD STAGE
 # ============================================
 - stage: Build
   displayName: "Build and Publish PlayersApi (.NET 9)"
@@ -40,13 +40,13 @@ stages:
           displayName: 'Restore NuGet packages'
           inputs:
             command: 'restore'
-            projects: 'src/PlayersApi/PlayersApi.csproj'
+            projects: 'ContosoPizza/ContosoPizza.csproj'
 
         - task: DotNetCoreCLI@2
           displayName: 'Build the project'
           inputs:
             command: 'build'
-            projects: 'src/PlayersApi/PlayersApi.csproj'
+            projects: 'ContosoPizza/ContosoPizza.csproj'
             arguments: '--configuration $(buildConfiguration)'
 
         - task: DotNetCoreCLI@2
@@ -54,21 +54,21 @@ stages:
           inputs:
             command: 'publish'
             publishWebProjects: false
-            projects: 'src/PlayersApi/PlayersApi.csproj'
+            projects: 'ContosoPizza/ContosoPizza.csproj'
             arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish'
 
         - task: CopyFiles@2
           displayName: 'Copy ARM templates'
           inputs:
-            SourceFolder: 'src/PlayersApi/infra'
+            SourceFolder: 'ContosoPizza/Infra'
             Contents: '*.json'
-            TargetFolder: '$(Build.ArtifactStagingDirectory)/infra'
+            TargetFolder: '$(Build.ArtifactStagingDirectory)/Infra'
 
         - publish: $(Build.ArtifactStagingDirectory)
           artifact: $(artifactName)
 
 # ============================================
-# 2️⃣ DEPLOY TO DEV
+# DEPLOY TO DEV
 # ============================================
 - stage: Deploy_Dev
   displayName: "Deploy to Development"
@@ -96,20 +96,23 @@ stages:
                   resourceGroupName: '$(resourceGroupName)-dev'
                   location: '$(location)'
                   templateLocation: 'Linked artifact'
-                  csmFile: '$(Pipeline.Workspace)/$(artifactName)/infra/azuredeploy.json'
-                  csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/infra/azuredeploy.parameters.json'
+                  csmFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.json'
+                  csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.parameters.json'
                   deploymentMode: 'Incremental'
 
-              - task: AzureWebApp@1
+              - task: AzureRmWebAppDeployment@4
                 displayName: 'Deploy PlayersApi to Dev App Service'
                 inputs:
+                  ConnectionType: 'AzureRM'
                   azureSubscription: '$(azureServiceConnection)'
                   appType: 'webApp'
-                  appName: '$(webAppName)-dev'
-                  package: '$(Pipeline.Workspace)/$(artifactName)/publish'
+                  WebAppName: '$(webAppName)-dev'
+                  Package: '$(Pipeline.Workspace)/$(artifactName)/publish'
+                  TakeAppOfflineFlag: true
+                  RemoveAdditionalFilesFlag: true
 
 # ============================================
-# 3️⃣ DEPLOY TO QA (with optional approval)
+# DEPLOY TO QA
 # ============================================
 - stage: Deploy_QA
   displayName: "Deploy to QA"
@@ -138,20 +141,23 @@ stages:
                   resourceGroupName: '$(resourceGroupName)-qa'
                   location: '$(location)'
                   templateLocation: 'Linked artifact'
-                  csmFile: '$(Pipeline.Workspace)/$(artifactName)/infra/azuredeploy.json'
-                  csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/infra/azuredeploy.parameters.json'
+                  csmFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.json'
+                  csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.parameters.json'
                   deploymentMode: 'Incremental'
 
-              - task: AzureWebApp@1
+              - task: AzureRmWebAppDeployment@4
                 displayName: 'Deploy PlayersApi to QA App Service'
                 inputs:
+                  ConnectionType: 'AzureRM'
                   azureSubscription: '$(azureServiceConnection)'
                   appType: 'webApp'
-                  appName: '$(webAppName)-qa'
-                  package: '$(Pipeline.Workspace)/$(artifactName)/publish'
+                  WebAppName: '$(webAppName)-qa'
+                  Package: '$(Pipeline.Workspace)/$(artifactName)/publish'
+                  TakeAppOfflineFlag: true
+                  RemoveAdditionalFilesFlag: true
 
 # ============================================
-# 4️⃣ DEPLOY TO PROD (with staging slot + swap)
+# DEPLOY TO PROD (with staging slot + swap)
 # ============================================
 - stage: Deploy_Prod
   displayName: "Deploy to Production (Staging Slot Swap)"
@@ -181,31 +187,26 @@ stages:
                   resourceGroupName: '$(resourceGroupName)-prod'
                   location: '$(location)'
                   templateLocation: 'Linked artifact'
-                  csmFile: '$(Pipeline.Workspace)/$(artifactName)/infra/azuredeploy.json'
-                  csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/infra/azuredeploy.parameters.json'
+                  csmFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.json'
+                  csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.parameters.json'
                   deploymentMode: 'Incremental'
 
-              # ✅ Deploy to staging slot
-              - task: AzureWebApp@1
+              # Deploy to staging slot
+              - task: AzureRmWebAppDeployment@4
                 displayName: 'Deploy PlayersApi to Staging Slot'
                 inputs:
+                  ConnectionType: 'AzureRM'
                   azureSubscription: '$(azureServiceConnection)'
                   appType: 'webApp'
-                  appName: '$(webAppName)-prod'
+                  WebAppName: '$(webAppName)-prod'
                   deployToSlotOrASE: true
-                  resourceGroupName: '$(resourceGroupName)-prod'
-                  slotName: 'staging'
-                  package: '$(Pipeline.Workspace)/$(artifactName)/publish'
-                  enableCustomDeployment: true
-                  takeAppOfflineFlag: true
-                  removeAdditionalFilesFlag: true
+                  ResourceGroupName: '$(resourceGroupName)-prod'
+                  SlotName: 'staging'
+                  Package: '$(Pipeline.Workspace)/$(artifactName)/publish'
+                  TakeAppOfflineFlag: true
+                  RemoveAdditionalFilesFlag: true
 
-              # Optional: Smoke test before swapping
-              # - script: |
-              #     curl -f https://$(webAppName)-prod-staging.azurewebsites.net/health || exit 1
-              #   displayName: "Run smoke test on staging slot"
-
-              # ✅ Swap staging slot to production
+              # Swap staging slot to production
               - task: AzureAppServiceManage@0
                 displayName: 'Swap Staging Slot to Production'
                 inputs:
