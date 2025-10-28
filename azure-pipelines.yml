@@ -1,0 +1,216 @@
+# ============================================
+# Azure DevOps Multi-Stage YAML Pipeline
+# Build + Deploy .NET 9 Minimal API (PlayersApi)
+# Includes Dev, QA, and Prod (with staging slot)
+# ============================================
+
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  buildConfiguration: 'Release'
+  azureServiceConnection: 'MyAzureConnection'     # Update with your Azure DevOps Service Connection name
+  subscriptionId: '<your-subscription-id>'        # Replace with your Azure Subscription ID
+  location: 'eastasia'
+  resourceGroupName: 'playersapi-rg'
+  webAppName: 'playersapi-web'
+  artifactName: 'drop'
+
+stages:
+# ============================================
+# 1️⃣ BUILD STAGE
+# ============================================
+- stage: Build
+  displayName: "Build and Publish PlayersApi (.NET 9)"
+  jobs:
+    - job: BuildJob
+      displayName: "Build Job"
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: UseDotNet@2
+          displayName: 'Install .NET 9 SDK'
+          inputs:
+            packageType: 'sdk'
+            version: '9.0.x'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Restore NuGet packages'
+          inputs:
+            command: 'restore'
+            projects: 'src/PlayersApi/PlayersApi.csproj'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Build the project'
+          inputs:
+            command: 'build'
+            projects: 'src/PlayersApi/PlayersApi.csproj'
+            arguments: '--configuration $(buildConfiguration)'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Publish PlayersApi'
+          inputs:
+            command: 'publish'
+            publishWebProjects: false
+            projects: 'src/PlayersApi/PlayersApi.csproj'
+            arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish'
+
+        - task: CopyFiles@2
+          displayName: 'Copy ARM templates'
+          inputs:
+            SourceFolder: 'src/PlayersApi/infra'
+            Contents: '*.json'
+            TargetFolder: '$(Build.ArtifactStagingDirectory)/infra'
+
+        - publish: $(Build.ArtifactStagingDirectory)
+          artifact: $(artifactName)
+
+# ============================================
+# 2️⃣ DEPLOY TO DEV
+# ============================================
+- stage: Deploy_Dev
+  displayName: "Deploy to Development"
+  dependsOn: Build
+  jobs:
+    - deployment: DeployDev
+      displayName: "Deploy ARM + App (Dev)"
+      environment: 'dev'
+      pool:
+        vmImage: 'ubuntu-latest'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: $(artifactName)
+
+              - task: AzureResourceManagerTemplateDeployment@3
+                displayName: 'Deploy infrastructure (Dev)'
+                inputs:
+                  deploymentScope: 'Resource Group'
+                  azureResourceManagerConnection: '$(azureServiceConnection)'
+                  subscriptionId: '$(subscriptionId)'
+                  action: 'Create Or Update Resource Group'
+                  resourceGroupName: '$(resourceGroupName)-dev'
+                  location: '$(location)'
+                  templateLocation: 'Linked artifact'
+                  csmFile: '$(Pipeline.Workspace)/$(artifactName)/infra/azuredeploy.json'
+                  csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/infra/azuredeploy.parameters.json'
+                  deploymentMode: 'Incremental'
+
+              - task: AzureWebApp@1
+                displayName: 'Deploy PlayersApi to Dev App Service'
+                inputs:
+                  azureSubscription: '$(azureServiceConnection)'
+                  appType: 'webApp'
+                  appName: '$(webAppName)-dev'
+                  package: '$(Pipeline.Workspace)/$(artifactName)/publish'
+
+# ============================================
+# 3️⃣ DEPLOY TO QA (with optional approval)
+# ============================================
+- stage: Deploy_QA
+  displayName: "Deploy to QA"
+  dependsOn: Deploy_Dev
+  condition: succeeded()
+  jobs:
+    - deployment: DeployQA
+      displayName: "Deploy ARM + App (QA)"
+      environment: 'qa'
+      pool:
+        vmImage: 'ubuntu-latest'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: $(artifactName)
+
+              - task: AzureResourceManagerTemplateDeployment@3
+                displayName: 'Deploy infrastructure (QA)'
+                inputs:
+                  deploymentScope: 'Resource Group'
+                  azureResourceManagerConnection: '$(azureServiceConnection)'
+                  subscriptionId: '$(subscriptionId)'
+                  action: 'Create Or Update Resource Group'
+                  resourceGroupName: '$(resourceGroupName)-qa'
+                  location: '$(location)'
+                  templateLocation: 'Linked artifact'
+                  csmFile: '$(Pipeline.Workspace)/$(artifactName)/infra/azuredeploy.json'
+                  csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/infra/azuredeploy.parameters.json'
+                  deploymentMode: 'Incremental'
+
+              - task: AzureWebApp@1
+                displayName: 'Deploy PlayersApi to QA App Service'
+                inputs:
+                  azureSubscription: '$(azureServiceConnection)'
+                  appType: 'webApp'
+                  appName: '$(webAppName)-qa'
+                  package: '$(Pipeline.Workspace)/$(artifactName)/publish'
+
+# ============================================
+# 4️⃣ DEPLOY TO PROD (with staging slot + swap)
+# ============================================
+- stage: Deploy_Prod
+  displayName: "Deploy to Production (Staging Slot Swap)"
+  dependsOn: Deploy_QA
+  condition: succeeded()
+  jobs:
+    - deployment: DeployProd
+      displayName: "Deploy ARM + App (Prod Slot)"
+      environment: 'prod'
+      pool:
+        vmImage: 'ubuntu-latest'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: $(artifactName)
+
+              # ARM Template deployment
+              - task: AzureResourceManagerTemplateDeployment@3
+                displayName: 'Deploy infrastructure (Prod)'
+                inputs:
+                  deploymentScope: 'Resource Group'
+                  azureResourceManagerConnection: '$(azureServiceConnection)'
+                  subscriptionId: '$(subscriptionId)'
+                  action: 'Create Or Update Resource Group'
+                  resourceGroupName: '$(resourceGroupName)-prod'
+                  location: '$(location)'
+                  templateLocation: 'Linked artifact'
+                  csmFile: '$(Pipeline.Workspace)/$(artifactName)/infra/azuredeploy.json'
+                  csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/infra/azuredeploy.parameters.json'
+                  deploymentMode: 'Incremental'
+
+              # ✅ Deploy to staging slot
+              - task: AzureWebApp@1
+                displayName: 'Deploy PlayersApi to Staging Slot'
+                inputs:
+                  azureSubscription: '$(azureServiceConnection)'
+                  appType: 'webApp'
+                  appName: '$(webAppName)-prod'
+                  deployToSlotOrASE: true
+                  resourceGroupName: '$(resourceGroupName)-prod'
+                  slotName: 'staging'
+                  package: '$(Pipeline.Workspace)/$(artifactName)/publish'
+                  enableCustomDeployment: true
+                  takeAppOfflineFlag: true
+                  removeAdditionalFilesFlag: true
+
+              # Optional: Smoke test before swapping
+              # - script: |
+              #     curl -f https://$(webAppName)-prod-staging.azurewebsites.net/health || exit 1
+              #   displayName: "Run smoke test on staging slot"
+
+              # ✅ Swap staging slot to production
+              - task: AzureAppServiceManage@0
+                displayName: 'Swap Staging Slot to Production'
+                inputs:
+                  azureSubscription: '$(azureServiceConnection)'
+                  WebAppName: '$(webAppName)-prod'
+                  ResourceGroupName: '$(resourceGroupName)-prod'
+                  SourceSlot: 'staging'
+                  SwapWithProduction: true
