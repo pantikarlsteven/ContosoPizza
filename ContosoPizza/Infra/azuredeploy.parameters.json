@@ -8,7 +8,19 @@
         "serverfarms_web_app_sp_name": {
             "value": null
         },
+        "sites_contosopizza_api_app_name": {
+            "value": null
+        },
         "components_web_api_app_name": {
+            "value": null
+        },
+        "serverfarms_contosopizza_sp_name": {
+            "value": null
+        },
+        "components_contosopizza_api_app_name": {
+            "value": null
+        },
+        "userAssignedIdentities_web_app_managed_id_name": {
             "value": null
         },
         "workspaces_DefaultWorkspace_b3342add_7cc4_491b_bf5e_e93aa8e970f2_SEA_externalid": {
