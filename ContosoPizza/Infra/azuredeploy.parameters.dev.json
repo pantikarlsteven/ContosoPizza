@@ -2,23 +2,11 @@
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "location": {
-      "value": "southeastasia"
-    },
     "appServicePlanName": {
       "value": "contosopizza-asp-dev"
     },
     "webAppName": {
       "value": "contosopizza-api-app-dev"
-    },
-    "skuName": {
-      "value": "B1"
-    },
-    "appSettings": {
-      "value": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        "Logging__LogLevel__Default": "Information"
-      }
     }
   }
 }
