@@ -4,30 +4,18 @@
   "parameters": {
     "location": {
       "type": "string",
-      "defaultValue": "southeastasia",
-      "metadata": {
-        "description": "Azure region for all resources."
-      }
+      "defaultValue": "southeastasia"
     },
     "appServicePlanName": {
-      "type": "string",
-      "metadata": {
-        "description": "App Service Plan name"
-      }
+      "type": "string"
     },
     "webAppName": {
-      "type": "string",
-      "metadata": {
-        "description": "Web App name"
-      }
+      "type": "string"
     },
     "appSettings": {
       "type": "object",
       "defaultValue": {
         "ASPNETCORE_ENVIRONMENT": "Production"
-      },
-      "metadata": {
-        "description": "App settings for the web app"
       }
     }
   },
@@ -64,6 +52,9 @@
           "type": "config",
           "apiVersion": "2022-03-01",
           "name": "appsettings",
+          "dependsOn": [
+            "[resourceId('Microsoft.Web/sites', parameters('webAppName'))]"
+          ],
           "properties": "[parameters('appSettings')]"
         }
       ]
