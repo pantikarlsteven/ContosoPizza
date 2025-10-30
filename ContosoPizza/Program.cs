@@ -27,7 +27,7 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-app.UseHttpsRedirection(); // can comment out if causing issues on Linux
+//app.UseHttpsRedirection(); // can comment out if causing issues on Linux
 app.UseCors("AllowAll");
 app.UseAuthorization();
 
