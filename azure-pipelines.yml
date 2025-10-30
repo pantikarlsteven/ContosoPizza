@@ -100,13 +100,14 @@ stages:
                   csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.parameters.dev.json'
                   deploymentMode: 'Incremental'
 
-              - task: AzureWebApp@1
-                displayName: 'Deploy PlayersApi to Dev'
+              - task: AzureRmWebAppDeployment@5
+                displayName: 'Deploy Web app to Dev'
                 inputs:
                   azureSubscription: '$(azureServiceConnection)'
-                  appType: 'webAppLinux'
-                  appName: '$(baseWebAppName)-dev'
-                  package: '$(Pipeline.Workspace)/$(artifactName)/publish'
+                  appType: webAppLinux
+                  WebAppName: '$(baseWebAppName)-dev'
+                  packageForLinux: '$(Pipeline.Workspace)/$(artifactName)/publish'
+                  DeploymentTypeLinux: zipDeploy
 
 
 # ============================================
