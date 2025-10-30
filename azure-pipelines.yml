@@ -23,7 +23,7 @@ stages:
 # BUILD STAGE
 # ============================================
 - stage: Build
-  displayName: "Build and Publish PlayersApi (.NET 9)"
+  displayName: "Build and Publish Web App (.NET 9)"
   jobs:
     - job: BuildJob
       displayName: "Build Job"
@@ -106,7 +106,7 @@ stages:
                   azureSubscription: '$(azureServiceConnection)'
                   appType: webAppLinux
                   WebAppName: '$(baseWebAppName)-dev'
-                  packageForLinux: '$(Pipeline.Workspace)/$(artifactName)/publish'
+                  packageForLinux: '$(Pipeline.Workspace)/$(artifactName)/publish/ContosoPizza.zip'
                   DeploymentTypeLinux: zipDeploy
 
 
