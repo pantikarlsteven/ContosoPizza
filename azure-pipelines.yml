@@ -105,7 +105,7 @@ stages:
                 inputs:
                   azureSubscription: '$(azureServiceConnection)'
                   appType: 'webAppLinux'
-                  appName: '$(webAppName)-dev'
+                  appName: '$(baseWebAppName)-dev'
                   package: '$(Pipeline.Workspace)/$(artifactName)/publish'
 
 
@@ -148,7 +148,7 @@ stages:
                 inputs:
                   azureSubscription: '$(azureServiceConnection)'
                   appType: 'webAppLinux'
-                  appName: '$(webAppName)-qa'
+                  appName: '$(baseWebAppName)-qa'
                   package: '$(Pipeline.Workspace)/$(artifactName)/publish'
 
 # ============================================
