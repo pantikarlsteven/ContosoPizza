@@ -108,6 +108,15 @@ stages:
                   appName: '$(baseWebAppName)-dev'
                   package: '$(Pipeline.Workspace)/$(artifactName)/publish'
 
+              - task: AzureRmWebAppDeployment@5
+                displayName: 'Deploy Web app to Dev'
+                inputs:
+                  azureSubscription: '$(azureServiceConnection)'
+                  appType: webAppLinux
+                  WebAppName: '$(baseWebAppName)-dev'
+                  packageForLinux: '$(System.DefaultWorkingDirectory)/_ContosoPizza-CI/drop/publish/ContosoPizza.zip'
+                  DeploymentTypeLinux: zipDeploy
+
 
 # ============================================
 # DEPLOY TO QA
