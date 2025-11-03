@@ -23,7 +23,7 @@ stages:
 # BUILD STAGE
 # ============================================
 - stage: Build
-  displayName: "Build and Publish PlayersApi (.NET 9)"
+  displayName: "Build and Publish Web App (.NET 9)"
   jobs:
     - job: BuildJob
       displayName: "Build Job"
@@ -106,7 +106,7 @@ stages:
                   azureSubscription: '$(azureServiceConnection)'
                   appType: webAppLinux
                   WebAppName: '$(baseWebAppName)-dev'
-                  packageForLinux: '$(Pipeline.Workspace)/$(artifactName)/publish'
+                  packageForLinux: '$(Pipeline.Workspace)/$(artifactName)/publish/ContosoPizza.zip'
                   DeploymentTypeLinux: zipDeploy
 
 
@@ -144,13 +144,14 @@ stages:
                   csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.parameters.qa.json'
                   deploymentMode: 'Incremental'
 
-              - task: AzureWebApp@1
-                displayName: 'Deploy PlayersApi to QA'
+              - task: AzureRmWebAppDeployment@5
+                displayName: 'Deploy Web app to QA'
                 inputs:
                   azureSubscription: '$(azureServiceConnection)'
-                  appType: 'webAppLinux'
-                  appName: '$(baseWebAppName)-qa'
-                  package: '$(Pipeline.Workspace)/$(artifactName)/publish'
+                  appType: webAppLinux
+                  WebAppName: '$(baseWebAppName)-qa'
+                  packageForLinux: '$(Pipeline.Workspace)/$(artifactName)/publish/ContosoPizza.zip'
+                  DeploymentTypeLinux: zipDeploy
 
 # ============================================
 # DEPLOY TO PROD (with staging slot + swap)
@@ -188,16 +189,17 @@ stages:
                   deploymentMode: 'Incremental'
 
               # Deploy to staging slot
-              - task: AzureWebApp@1
+              - task: AzureRmWebAppDeployment@5
                 displayName: 'Deploy to Staging Slot'
                 inputs:
                   azureSubscription: '$(azureServiceConnection)'
-                  appType: 'webAppLinux'
-                  appName: '$(baseWebAppName)-prod'
-                  package: '$(Pipeline.Workspace)/$(artifactName)/publish'
+                  appType: webAppLinux
+                  WebAppName: '$(baseWebAppName)-prod'
+                  packageForLinux: '$(Pipeline.Workspace)/$(artifactName)/publish/ContosoPizza.zip'
                   deployToSlotOrASE: true
-                  resourceGroupName: '$(baseResourceGroupName)-prod'
-                  slotName: 'staging'
+                  ResourceGroupName: '$(baseResourceGroupName)-prod'
+                  SlotName: 'staging'
+                  DeploymentTypeLinux: zipDeploy
 
               # Swap staging slot to production
               - task: AzureAppServiceManage@0
