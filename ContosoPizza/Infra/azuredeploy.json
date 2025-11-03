@@ -26,8 +26,9 @@
       "name": "[parameters('appServicePlanName')]",
       "location": "[parameters('location')]",
       "sku": {
-        "name": "B1",
-        "tier": "Basic",
+        "name": "S1",
+        "tier": "Standard",
+        "size": "S1",
         "capacity": 1
       },
       "kind": "linux",
