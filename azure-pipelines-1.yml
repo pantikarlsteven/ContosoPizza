@@ -1,195 +1,212 @@
+# ============================================
+# Azure DevOps Multi-Stage YAML Pipeline
+# Build + Deploy .NET 9 Minimal API (PlayersApi)
+# Includes Dev, QA, and Prod (with staging slot)
+# ============================================
+
 trigger:
   branches:
     include:
-    - main
+      - main
+
 variables:
-- name: buildConfiguration
-  value: 'Release'
-- name: azureServiceConnection
-  value: 'WebAppAzureSubsCon'
-- name: subscriptionId
-  value: 'b3342add-7cc4-491b-bf5e-e93aa8e970f2'
-- name: location
-  value: 'southeastasia'
-- name: baseResourceGroupName
-  value: 'web-app-rg'
-- name: baseWebAppName
-  value: 'contosopizza-api-app'
-- name: artifactName
-  value: 'drop'
+  buildConfiguration: 'Release'
+  azureServiceConnection: 'WebAppAzureSubsCon'
+  subscriptionId: 'b3342add-7cc4-491b-bf5e-e93aa8e970f2'
+  location: 'southeastasia'
+  baseResourceGroupName: 'web-app-rg'
+  baseWebAppName: 'contosopizza-api-app'
+  artifactName: 'drop'
+
 stages:
+# ============================================
+# BUILD STAGE
+# ============================================
 - stage: Build
   displayName: "Build and Publish Web App (.NET 9)"
   jobs:
-  - job: BuildJob
-    displayName: "Build Job"
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - task: UseDotNet@2
-      displayName: 'Install .NET 9 SDK'
-      inputs:
-        packageType: 'sdk'
-        version: '9.0.x'
-    - task: DotNetCoreCLI@2
-      displayName: 'Restore NuGet packages'
-      inputs:
-        command: 'restore'
-        projects: 'ContosoPizza/ContosoPizza.csproj'
-    - task: DotNetCoreCLI@2
-      displayName: 'Build the project'
-      inputs:
-        command: 'build'
-        projects: 'ContosoPizza/ContosoPizza.csproj'
-        arguments: '--configuration $(buildConfiguration)'
-    - task: DotNetCoreCLI@2
-      displayName: 'Publish PlayersApi'
-      inputs:
-        command: 'publish'
-        publishWebProjects: false
-        projects: 'ContosoPizza/ContosoPizza.csproj'
-        arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish'
-    - task: CopyFiles@2
-      displayName: 'Copy ARM templates'
-      inputs:
-        SourceFolder: 'ContosoPizza/Infra'
-        Contents: '*.json'
-        TargetFolder: '$(Build.ArtifactStagingDirectory)/Infra'
-    - task: PublishPipelineArtifact@1
-      inputs:
-        path: $(Build.ArtifactStagingDirectory)
-        artifactName: $(artifactName)
+    - job: BuildJob
+      displayName: "Build Job"
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: UseDotNet@2
+          displayName: 'Install .NET 9 SDK'
+          inputs:
+            packageType: 'sdk'
+            version: '9.0.x'
 
+        - task: DotNetCoreCLI@2
+          displayName: 'Restore NuGet packages'
+          inputs:
+            command: 'restore'
+            projects: 'ContosoPizza/ContosoPizza.csproj'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Build the project'
+          inputs:
+            command: 'build'
+            projects: 'ContosoPizza/ContosoPizza.csproj'
+            arguments: '--configuration $(buildConfiguration)'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Publish PlayersApi'
+          inputs:
+            command: 'publish'
+            publishWebProjects: false
+            projects: 'ContosoPizza/ContosoPizza.csproj'
+            arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish'
+
+        - task: CopyFiles@2
+          displayName: 'Copy ARM templates'
+          inputs:
+            SourceFolder: 'ContosoPizza/Infra'
+            Contents: '*.json'
+            TargetFolder: '$(Build.ArtifactStagingDirectory)/Infra'
+
+        - publish: $(Build.ArtifactStagingDirectory)
+          artifact: $(artifactName)
+
+# ============================================
+# DEPLOY TO DEV
+# ============================================
 - stage: Deploy_Dev
   displayName: "Deploy to Development"
-  dependsOn:
-  - Build
+  dependsOn: Build
   jobs:
-  - deployment: DeployDev
-    displayName: "Deploy ARM + App (Dev)"
-    environment:
-      name: 'dev'
-    pool:
-      vmImage: 'ubuntu-latest'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - task: 30f35852-3f7e-4c0c-9a88-e127b4f97211@1
-            inputs:
-              alias: current
-              artifact: $(artifactName)
-          - task: AzureResourceManagerTemplateDeployment@3
-            displayName: 'Deploy infrastructure (Dev)'
-            inputs:
-              deploymentScope: 'Resource Group'
-              azureResourceManagerConnection: '$(azureServiceConnection)'
-              subscriptionId: '$(subscriptionId)'
-              action: 'Create Or Update Resource Group'
-              resourceGroupName: '$(baseResourceGroupName)-dev'
-              location: '$(location)'
-              templateLocation: 'Linked artifact'
-              csmFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.json'
-              csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.parameters.dev.json'
-              deploymentMode: 'Incremental'
-          - task: AzureRmWebAppDeployment@5
-            displayName: 'Deploy Web app to Dev'
-            inputs:
-              azureSubscription: '$(azureServiceConnection)'
-              appType: webAppLinux
-              WebAppName: '$(baseWebAppName)-dev'
-              packageForLinux: '$(Pipeline.Workspace)/$(artifactName)/publish/ContosoPizza.zip'
-              DeploymentTypeLinux: zipDeploy
+    - deployment: DeployDev
+      displayName: "Deploy ARM + App (Dev)"
+      environment: 'dev'
+      pool:
+        vmImage: 'ubuntu-latest'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: $(artifactName)
+
+              - task: AzureResourceManagerTemplateDeployment@3
+                displayName: 'Deploy infrastructure (Dev)'
+                inputs:
+                  deploymentScope: 'Resource Group'
+                  azureResourceManagerConnection: '$(azureServiceConnection)'
+                  subscriptionId: '$(subscriptionId)'
+                  action: 'Create Or Update Resource Group'
+                  resourceGroupName: '$(baseResourceGroupName)-dev'
+                  location: '$(location)'
+                  templateLocation: 'Linked artifact'
+                  csmFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.json'
+                  csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.parameters.dev.json'
+                  deploymentMode: 'Incremental'
+
+              - task: AzureRmWebAppDeployment@5
+                displayName: 'Deploy Web app to Dev'
+                inputs:
+                  azureSubscription: '$(azureServiceConnection)'
+                  appType: webAppLinux
+                  WebAppName: '$(baseWebAppName)-dev'
+                  packageForLinux: '$(Pipeline.Workspace)/$(artifactName)/publish/ContosoPizza.zip'
+                  DeploymentTypeLinux: zipDeploy
+
+
+# ============================================
+# DEPLOY TO QA
+# ============================================
 - stage: Deploy_QA
   displayName: "Deploy to QA"
-  dependsOn:
-  - Deploy_Dev
+  dependsOn: Deploy_Dev
   condition: succeeded()
   jobs:
-  - deployment: DeployQA
-    displayName: "Deploy ARM + App (QA)"
-    environment:
-      name: 'qa'
-    pool:
-      vmImage: 'ubuntu-latest'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - task: 30f35852-3f7e-4c0c-9a88-e127b4f97211@1
-            inputs:
-              alias: current
-              artifact: $(artifactName)
-          - task: AzureResourceManagerTemplateDeployment@3
-            displayName: 'Deploy infrastructure (QA)'
-            inputs:
-              deploymentScope: 'Resource Group'
-              azureResourceManagerConnection: '$(azureServiceConnection)'
-              subscriptionId: '$(subscriptionId)'
-              action: 'Create Or Update Resource Group'
-              resourceGroupName: '$(baseResourceGroupName)-qa'
-              location: '$(location)'
-              templateLocation: 'Linked artifact'
-              csmFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.json'
-              csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.parameters.qa.json'
-              deploymentMode: 'Incremental'
-          - task: AzureRmWebAppDeployment@5
-            displayName: 'Deploy Web app to QA'
-            inputs:
-              azureSubscription: '$(azureServiceConnection)'
-              appType: webAppLinux
-              WebAppName: '$(baseWebAppName)-qa'
-              packageForLinux: '$(Pipeline.Workspace)/$(artifactName)/publish/ContosoPizza.zip'
-              DeploymentTypeLinux: zipDeploy
+    - deployment: DeployQA
+      displayName: "Deploy ARM + App (QA)"
+      environment: 'qa'
+      pool:
+        vmImage: 'ubuntu-latest'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: $(artifactName)
+
+              - task: AzureResourceManagerTemplateDeployment@3
+                displayName: 'Deploy infrastructure (QA)'
+                inputs:
+                  deploymentScope: 'Resource Group'
+                  azureResourceManagerConnection: '$(azureServiceConnection)'
+                  subscriptionId: '$(subscriptionId)'
+                  action: 'Create Or Update Resource Group'
+                  resourceGroupName: '$(baseResourceGroupName)-qa'
+                  location: '$(location)'
+                  templateLocation: 'Linked artifact'
+                  csmFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.json'
+                  csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.parameters.qa.json'
+                  deploymentMode: 'Incremental'
+
+              - task: AzureRmWebAppDeployment@5
+                displayName: 'Deploy Web app to QA'
+                inputs:
+                  azureSubscription: '$(azureServiceConnection)'
+                  appType: webAppLinux
+                  WebAppName: '$(baseWebAppName)-qa'
+                  packageForLinux: '$(Pipeline.Workspace)/$(artifactName)/publish/ContosoPizza.zip'
+                  DeploymentTypeLinux: zipDeploy
+
+# ============================================
+# DEPLOY TO PROD (with staging slot + swap)
+# ============================================
 - stage: Deploy_Prod
   displayName: "Deploy to Production (Staging Slot Swap)"
-  dependsOn:
-  - Deploy_QA
+  dependsOn: Deploy_QA
   condition: succeeded()
   jobs:
-  - deployment: DeployProd
-    displayName: "Deploy ARM + App (Prod Slot)"
-    environment:
-      name: 'prod'
-    pool:
-      vmImage: 'ubuntu-latest'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - task: 30f35852-3f7e-4c0c-9a88-e127b4f97211@1
-            inputs:
-              alias: current
-              artifact: $(artifactName)
-          - task: AzureResourceManagerTemplateDeployment@3
-            displayName: 'Deploy infrastructure (Prod)'
-            inputs:
-              deploymentScope: 'Resource Group'
-              azureResourceManagerConnection: '$(azureServiceConnection)'
-              subscriptionId: '$(subscriptionId)'
-              action: 'Create Or Update Resource Group'
-              resourceGroupName: '$(baseResourceGroupName)-prod'
-              location: '$(location)'
-              templateLocation: 'Linked artifact'
-              csmFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.json'
-              csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.parameters.prod.json'
-              deploymentMode: 'Incremental'
-          - task: AzureRmWebAppDeployment@5
-            displayName: 'Deploy to Staging Slot'
-            inputs:
-              azureSubscription: '$(azureServiceConnection)'
-              appType: webAppLinux
-              WebAppName: '$(baseWebAppName)-prod'
-              packageForLinux: '$(Pipeline.Workspace)/$(artifactName)/publish/ContosoPizza.zip'
-              deployToSlotOrASE: true
-              ResourceGroupName: '$(baseResourceGroupName)-prod'
-              SlotName: 'staging'
-              DeploymentTypeLinux: zipDeploy
-          - task: AzureAppServiceManage@0
-            displayName: 'Swap Staging Slot to Production'
-            inputs:
-              azureSubscription: '$(azureServiceConnection)'
-              WebAppName: '$(baseWebAppName)-prod'
-              ResourceGroupName: '$(baseResourceGroupName)-prod'
-              SourceSlot: 'staging'
-              SwapWithProduction: true
+    - deployment: DeployProd
+      displayName: "Deploy ARM + App (Prod Slot)"
+      environment: 'prod'
+      pool:
+        vmImage: 'ubuntu-latest'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: $(artifactName)
+
+              # ARM Template deployment
+              - task: AzureResourceManagerTemplateDeployment@3
+                displayName: 'Deploy infrastructure (Prod)'
+                inputs:
+                  deploymentScope: 'Resource Group'
+                  azureResourceManagerConnection: '$(azureServiceConnection)'
+                  subscriptionId: '$(subscriptionId)'
+                  action: 'Create Or Update Resource Group'
+                  resourceGroupName: '$(baseResourceGroupName)-prod'
+                  location: '$(location)'
+                  templateLocation: 'Linked artifact'
+                  csmFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.json'
+                  csmParametersFile: '$(Pipeline.Workspace)/$(artifactName)/Infra/azuredeploy.parameters.prod.json'
+                  deploymentMode: 'Incremental'
+
+              # Deploy to staging slot
+              - task: AzureRmWebAppDeployment@5
+                displayName: 'Deploy to Staging Slot'
+                inputs:
+                  azureSubscription: '$(azureServiceConnection)'
+                  appType: webAppLinux
+                  WebAppName: '$(baseWebAppName)-prod'
+                  packageForLinux: '$(Pipeline.Workspace)/$(artifactName)/publish/ContosoPizza.zip'
+                  deployToSlotOrASE: true
+                  ResourceGroupName: '$(baseResourceGroupName)-prod'
+                  SlotName: 'staging'
+                  DeploymentTypeLinux: zipDeploy
+
+              # Swap staging slot to production
+              - task: AzureAppServiceManage@0
+                displayName: 'Swap Staging Slot to Production'
+                inputs:
+                  azureSubscription: '$(azureServiceConnection)'
+                  WebAppName: '$(baseWebAppName)-prod'
+                  ResourceGroupName: '$(baseResourceGroupName)-prod'
+                  SourceSlot: 'staging'
+                  SwapWithProduction: true
